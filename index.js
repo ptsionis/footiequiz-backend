@@ -17,11 +17,11 @@ const io = new Server(server, {
 });
 
 const connection = createConnection({
-  host: "localhost",
-  user: "root",
-  password: "",
-  database: "quizdb",
-  port: 3307,
+  host: process.env.MYSQL_ADDON_HOST,
+  user: process.env.MYSQL_ADDON_USER,
+  password: process.env.MYSQL_ADDON_PASSWORD,
+  database: process.env.MYSQL_ADDON_DB,
+  port: 3306,
 });
 
 app.use(urlencoded({ extended: true }));
@@ -206,4 +206,4 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(import.meta.env.PORT || 3001, () => {});
+server.listen(process.env.PORT, () => {});
