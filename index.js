@@ -7,21 +7,21 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const rooms = {};
 const server = createServer(app);
+const PORT = 3001;
+const rooms = {};
 
 const io = new Server(server, {
   cors: {
-    origin: "https://quizball-fe.onrender.com",
+    origin: "http://localhost:5173",
   },
 });
 
 const connection = createConnection({
-  host: process.env.MYSQL_ADDON_HOST,
-  user: process.env.MYSQL_ADDON_USER,
-  password: process.env.MYSQL_ADDON_PASSWORD,
-  database: process.env.MYSQL_ADDON_DB,
-  port: 3306,
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
 });
 
 app.use(urlencoded({ extended: true }));
@@ -84,14 +84,14 @@ io.on("connection", (socket) => {
     connection
       .promise()
       .query(
-        `SELECT COUNT(*) AS size FROM quizdb.Question WHERE category = '${category}' AND level = ${level}`
+        `SELECT COUNT(*) AS size FROM Question WHERE category = '${category}' AND level = ${level}`
       )
       .then(([result]) => {
         let random = Math.floor(Math.random() * result[0].size);
         return connection
           .promise()
           .query(
-            `SELECT * FROM question WHERE category = '${category}' AND level = ${level} LIMIT ${random}, 1;`
+            `SELECT * FROM Question WHERE category = '${category}' AND level = ${level} LIMIT ${random}, 1;`
           );
       })
       .then(([rows]) => {
@@ -111,7 +111,7 @@ io.on("connection", (socket) => {
           answersId.map(async (data) => {
             const [rows] = await connection
               .promise()
-              .query(`SELECT * FROM quizdb.Answer WHERE id = '${data}'`);
+              .query(`SELECT * FROM Answer WHERE id = '${data}'`);
             return rows[0].answer;
           })
         );
@@ -206,4 +206,4 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(process.env.PORT, () => {});
+server.listen(PORT, () => {});
