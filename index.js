@@ -4,11 +4,10 @@ import { Server } from "socket.io";
 import cors from "cors";
 import { createConnection } from "mysql2";
 import dotenv from "dotenv";
-dotenv.config();
 
 const app = express();
 const server = createServer(app);
-const PORT = 3001;
+dotenv.config();
 const rooms = {};
 
 const io = new Server(server, {
@@ -206,4 +205,4 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => {});
+server.listen(process.env.PORT, () => {});
