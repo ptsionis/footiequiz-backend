@@ -12,7 +12,7 @@ const rooms = {};
 
 const io = new Server(server, {
   cors: {
-    origin: "https://quizball-frontend.onrender.com",
+    origin: process.env.CORS_ORIGIN,
   },
 });
 
