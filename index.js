@@ -17,20 +17,44 @@ const io = new Server(server, {
   },
 });
 
-const connection = createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-});
+let connection;
+
+const connectToDatabase = () => {
+  connection = createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+  });
+
+  connection.connect((error) => {
+    if (error) {
+      console.error("Failed to connect to the database:", error);
+    } else {
+      console.log("Connected to the database");
+    }
+  });
+};
+
+const closeDatabaseConnection = () => {
+  if (connection) {
+    connection.end((error) => {
+      if (error) {
+        console.error("Failed to close the database connection:", error);
+      } else {
+        console.log("Database connection closed");
+      }
+    });
+  }
+};
 
 app.use(urlencoded({ extended: true }));
 app.use(cors());
 
 io.on("connection", (socket) => {
   if (roomsCounter === 0) {
-    console.log(`connecting with db...`)
-    connection.connect();
+    console.log("Connecting with the database...");
+    connectToDatabase();
   }
 
   socket.on("createRoom", () => {
@@ -216,10 +240,16 @@ io.on("connection", (socket) => {
     }
 
     if (roomsCounter === 0 && !foundActiveRoom) {
-      connection.end();
-      console.log(`connection closed`);
+      closeDatabaseConnection();
     }
   });
 });
 
-server.listen(process.env.PORT, () => {});
+server.listen(process.env.PORT, () => {
+  console.log(`Server is running on port ${process.env.PORT}`);
+});
+
+process.on("SIGINT", () => {
+  closeDatabaseConnection();
+  process.exit();
+});
