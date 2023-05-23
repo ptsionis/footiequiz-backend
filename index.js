@@ -9,6 +9,7 @@ const app = express();
 const server = createServer(app);
 dotenv.config();
 const rooms = {};
+let roomsCounter = 0;
 
 const io = new Server(server, {
   cors: {
@@ -25,10 +26,16 @@ const connection = createConnection({
 
 app.use(urlencoded({ extended: true }));
 app.use(cors());
-connection.connect();
 
 io.on("connection", (socket) => {
+  if (roomsCounter === 0) {
+    console.log(`connecting with db...`)
+    connection.connect();
+  }
+
   socket.on("createRoom", () => {
+    roomsCounter++;
+    console.log(`room created`);
     let roomId;
     do {
       roomId = Math.random().toString(36).substring(2, 10);
@@ -61,7 +68,7 @@ io.on("connection", (socket) => {
       rooms[roomId].users.push(socket.id);
       rooms[roomId].scores[1].player = socket.id;
       rooms[roomId].doubles[1].player = socket.id;
-      if (rooms[roomId].users.length == 2) {
+      if (rooms[roomId].users.length === 2) {
         rooms[roomId].playerTurn =
           rooms[roomId].users[
             Math.floor(Math.random() * rooms[roomId].users.length)
@@ -134,7 +141,7 @@ io.on("connection", (socket) => {
 
   socket.on("useDouble", ({ roomId, playerId }) => {
     const doubleIndex = rooms[roomId].doubles[0].player == playerId ? 0 : 1;
-    if (rooms[roomId].doubles[doubleIndex].double == 0) {
+    if (rooms[roomId].doubles[doubleIndex].double === 0) {
       rooms[roomId].doubles[doubleIndex].double = 1;
     }
     io.to(roomId).emit("responseDouble", playerId);
@@ -151,22 +158,22 @@ io.on("connection", (socket) => {
     const currentPlayerIndex =
       playerId == rooms[roomId].scores[0].player ? 0 : 1;
 
-    if (rooms[roomId].currentQuestion.correctAns == answerId) {
+    if (rooms[roomId].currentQuestion.correctAns === answerId) {
       rooms[roomId].scores[currentPlayerIndex].score +=
         rooms[roomId].currentQuestion.level;
-      if (rooms[roomId].doubles[currentPlayerIndex].double == 1) {
+      if (rooms[roomId].doubles[currentPlayerIndex].double === 1) {
         rooms[roomId].scores[currentPlayerIndex].score +=
           rooms[roomId].currentQuestion.level;
         rooms[roomId].doubles[currentPlayerIndex].double = -1;
       }
     } else {
-      if (rooms[roomId].doubles[currentPlayerIndex].double == 1) {
+      if (rooms[roomId].doubles[currentPlayerIndex].double === 1) {
         rooms[roomId].doubles[currentPlayerIndex].double = -1;
       }
     }
 
     rooms[roomId].playerTurn =
-      rooms[roomId].playerTurn == rooms[roomId].users[0]
+      rooms[roomId].playerTurn === rooms[roomId].users[0]
         ? rooms[roomId].users[1]
         : rooms[roomId].users[0];
 
@@ -188,6 +195,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    let foundActiveRoom = false;
     for (const roomId in rooms) {
       const room = rooms[roomId];
       const userIndex = room.users.indexOf(socket.id);
@@ -196,11 +204,20 @@ io.on("connection", (socket) => {
         if (room.users.length === 1) {
           io.to(roomId).emit("playerLeft");
         }
-        if (room.users.length == 0) {
+        if (room.users.length === 0) {
           delete rooms[roomId];
+          roomsCounter--;
+          console.log(`room deleted`);
+        } else {
+          foundActiveRoom = true;
         }
         break;
       }
+    }
+
+    if (roomsCounter === 0 && !foundActiveRoom) {
+      connection.end();
+      console.log(`connection closed`);
     }
   });
 });
