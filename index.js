@@ -36,15 +36,6 @@ const connectToDatabase = async () => {
   }
 };
 
-const closeDatabaseConnection = async () => {
-  try {
-    await client.end();
-    console.log("Database connection closed");
-  } catch (error) {
-    console.error("Failed to close the database connection:", error);
-  }
-};
-
 app.use(urlencoded({ extended: true }));
 app.use(cors());
 
@@ -230,18 +221,13 @@ io.on("connection", (socket) => {
         break;
       }
     }
-
+  
     if (roomsCounter === 0 && !foundActiveRoom) {
-      closeDatabaseConnection();
+      console.log("All rooms are deleted and no active rooms found");
     }
   });
 });
 
 server.listen(process.env.PORT, () => {
   console.log(`Server is running on port ${process.env.PORT}`);
-});
-
-process.on("SIGINT", () => {
-  closeDatabaseConnection();
-  process.exit();
 });
