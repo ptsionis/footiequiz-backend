@@ -36,18 +36,15 @@ const connectToDatabase = async () => {
   }
 };
 
+connectToDatabase();
+
 app.use(urlencoded({ extended: true }));
 app.use(cors());
 
 io.on("connection", (socket) => {
-  if (roomsCounter === 0) {
-    console.log("Connecting with the database...");
-    connectToDatabase();
-  }
-
   socket.on("createRoom", () => {
     roomsCounter++;
-    console.log(`room created`);
+    console.log(`A room was created, total rooms active: ${roomsCounter}`);
     let roomId;
     do {
       roomId = Math.random().toString(36).substring(2, 10);
@@ -214,7 +211,7 @@ io.on("connection", (socket) => {
         if (room.users.length === 0) {
           delete rooms[roomId];
           roomsCounter--;
-          console.log(`room deleted`);
+          console.log(`A room was deleted, total rooms active: ${roomsCounter}.`);
         } else {
           foundActiveRoom = true;
         }
