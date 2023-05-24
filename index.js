@@ -2,7 +2,7 @@ import express, { urlencoded } from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
-import { createConnection } from "mysql2";
+import pg from "pg";
 import dotenv from "dotenv";
 
 const app = express();
@@ -17,34 +17,32 @@ const io = new Server(server, {
   },
 });
 
-let connection;
+const { Client } = pg;
 
-const connectToDatabase = () => {
-  connection = createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-  });
+const client = new Client({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT,
+  ssl: true,
+});
 
-  connection.connect((error) => {
-    if (error) {
-      console.error("Failed to connect to the database:", error);
-    } else {
-      console.log("Connected to the database");
-    }
-  });
+const connectToDatabase = async () => {
+  try {
+    await client.connect();
+    console.log("Connected to the database");
+  } catch (error) {
+    console.error("Failed to connect to the database:", error);
+  }
 };
 
-const closeDatabaseConnection = () => {
-  if (connection) {
-    connection.end((error) => {
-      if (error) {
-        console.error("Failed to close the database connection:", error);
-      } else {
-        console.log("Database connection closed");
-      }
-    });
+const closeDatabaseConnection = async () => {
+  try {
+    await client.end();
+    console.log("Database connection closed");
+  } catch (error) {
+    console.error("Failed to close the database connection:", error);
   }
 };
 
@@ -107,60 +105,55 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("getQuestion", ({ roomId, category, level }) => {
-    let obj = {};
-    let answersId = [];
+  socket.on("getQuestion", async ({ roomId, category, level }) => {
+    try {
+      const result = await client.query(
+        `SELECT COUNT(*) AS size FROM Question WHERE category = $1 AND level = $2`,
+        [category, level]
+      );
+      const random = Math.floor(Math.random() * result.rows[0].size);
+      const { rows } = await client.query(
+        `SELECT * FROM Question WHERE category = $1 AND level = $2 OFFSET $3 LIMIT 1`,
+        [category, level, random]
+      );
 
-    connection
-      .promise()
-      .query(
-        `SELECT COUNT(*) AS size FROM Question WHERE category = '${category}' AND level = ${level}`
-      )
-      .then(([result]) => {
-        let random = Math.floor(Math.random() * result[0].size);
-        return connection
-          .promise()
-          .query(
-            `SELECT * FROM Question WHERE category = '${category}' AND level = ${level} LIMIT ${random}, 1;`
-          );
-      })
-      .then(([rows]) => {
-        obj.category = category;
-        obj.level = level;
-        obj.question = rows[0].question;
-        obj.imageUrl = rows[0].imageUrl;
-        obj.tip = rows[0].tip;
-        obj.correctAns = rows[0].correctAns;
-        answersId.push(rows[0].firstAnsId);
-        answersId.push(rows[0].secondAnsId);
-        answersId.push(rows[0].thirdAnsId);
-        answersId.push(rows[0].fourthAnsId);
-      })
-      .then(() => {
-        return Promise.all(
-          answersId.map(async (data) => {
-            const [rows] = await connection
-              .promise()
-              .query(`SELECT * FROM Answer WHERE id = '${data}'`);
-            return rows[0].answer;
-          })
-        );
-      })
-      .then((answers) => {
-        obj.answers = answers;
-        rooms[roomId].currentQuestion = { ...obj };
-        rooms[roomId].playedQuestions.push(category + level);
-        io.to(roomId).emit("setQuestion", {
-          category: category,
-          level: level,
-          question: obj.question,
-          imageUrl: obj.imageUrl,
-          answers: obj.answers,
-        });
-      })
-      .catch((error) => {
-        throw error;
+      const obj = {
+        category,
+        level,
+        question: rows[0].question,
+        imageurl: rows[0].imageurl,
+        tip: rows[0].tip,
+        correctans: rows[0].correctans,
+      };
+
+      const answersId = [
+        rows[0].firstansid,
+        rows[0].secondansid,
+        rows[0].thirdansid,
+        rows[0].fourthansid,
+      ];
+
+      const answersPromises = answersId.map((data) =>
+        client.query("SELECT * FROM Answer WHERE id = $1", [data])
+      );
+      const answersResults = await Promise.all(answersPromises);
+      const answers = answersResults.map((result) => result.rows[0].answer);
+
+      obj.answers = answers;
+
+      rooms[roomId].currentQuestion = { ...obj };
+      rooms[roomId].playedQuestions.push(category + level);
+
+      io.to(roomId).emit("setQuestion", {
+        category,
+        level,
+        question: obj.question,
+        imageUrl: obj.imageurl,
+        answers: obj.answers,
       });
+    } catch (error) {
+      console.error("Error fetching question from database:", error);
+    }
   });
 
   socket.on("useDouble", ({ roomId, playerId }) => {
@@ -182,7 +175,7 @@ io.on("connection", (socket) => {
     const currentPlayerIndex =
       playerId == rooms[roomId].scores[0].player ? 0 : 1;
 
-    if (rooms[roomId].currentQuestion.correctAns === answerId) {
+    if (rooms[roomId].currentQuestion.correctans === answerId) {
       rooms[roomId].scores[currentPlayerIndex].score +=
         rooms[roomId].currentQuestion.level;
       if (rooms[roomId].doubles[currentPlayerIndex].double === 1) {
@@ -203,7 +196,7 @@ io.on("connection", (socket) => {
 
     io.to(roomId).emit("revealAnswer", {
       playerAns: answerId,
-      correctAns: rooms[roomId].currentQuestion.correctAns,
+      correctAns: rooms[roomId].currentQuestion.correctans,
       scores: rooms[roomId].scores,
       doubles: rooms[roomId].doubles,
       playedQuestions: rooms[roomId].playedQuestions,
